@@ -103,6 +103,8 @@ class Writer
 
         $nominalIdx = 0;
 
+        $variableNames = [];
+
         /** @var Variable $var */
         // for ($idx = 0; $idx <= $variablesCount; $idx++) {
         foreach (array_values($data['variables']) as $idx => $var) {
@@ -122,8 +124,15 @@ class Writer
 
             $variable = new Record\Variable();
 
-            // TODO: refactory - keep 7 positions so we can add after that for 100 very long string segments
-            $variable->name  = 'V' . str_pad($idx + 1, 5, 0, STR_PAD_LEFT);
+            $name = strtoupper(substr($var->name, 0, 8));
+            $counter = 0;
+            while (isset($variableNames[$name])) {
+                $name = strtoupper(substr($var->name, 0, 5) . base_convert($counter, 10, 36));
+                $counter++;
+            }
+            $variableNames[$name] = true;
+            $variable->name = $name;
+
             $variable->width = Variable::FORMAT_TYPE_A === $var->format ? $var->width : 0;
 
             $variable->label = $var->label;
