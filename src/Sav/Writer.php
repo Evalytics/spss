@@ -124,14 +124,16 @@ class Writer
 
             $variable = new Record\Variable();
 
-            $name = strtoupper(substr($var->name, 0, 8));
-            $counter = 0;
-            while (isset($variableNames[$name])) {
-                $name = strtoupper(substr($var->name, 0, 5) . base_convert($counter, 10, 36));
-                $counter++;
+            $segmentCount = Utils::widthToSegments($var->width);
+
+            $variable->name = $this->generateShortName($var->name, $variableNames);
+            if ($segmentCount > 1) {
+                $variable->segmentNamePrefix = $this->generateSegmentNamePrefix(
+                    $variable->name,
+                    $segmentCount,
+                    $variableNames
+                );
             }
-            $variableNames[$name] = true;
-            $variable->name = $name;
 
             $variable->width = Variable::FORMAT_TYPE_A === $var->format ? $var->width : 0;
 
@@ -200,8 +202,6 @@ class Writer
             if (Record\Variable::isVeryLong($var->width) !== false) {
                 $this->info[Record\Info\VeryLongString::SUBTYPE][$shortName] = $var->width;
             }
-
-            $segmentCount = Utils::widthToSegments($var->width);
 
             for ($i = 0; $i < $segmentCount; $i++) {
                 $this->info[Record\Info\VariableDisplayParam::SUBTYPE][] = [
@@ -306,6 +306,85 @@ class Writer
     public function getBuffer()
     {
         return $this->buffer;
+    }
+
+    /**
+     * Generates a unique 8-character name for a physical variable record.
+     *
+     * The dictionary only has room for an 8 byte name, the real name is stored
+     * separately in the long variable names record. Short names are the key
+     * everything else is matched on, so they must be unique within the file.
+     *
+     * @param string $longName
+     * @param array  $reserved names already taken, updated by this method
+     *
+     * @return string
+     */
+    private function generateShortName($longName, array &$reserved)
+    {
+        $name    = mb_strtoupper(mb_substr($longName, 0, 8));
+        $counter = 0;
+
+        while (isset($reserved[$name])) {
+            $suffix = mb_strtoupper(base_convert($counter, 10, 36));
+            $name   = mb_strtoupper(mb_substr($longName, 0, 8 - mb_strlen($suffix))) . $suffix;
+            $counter++;
+        }
+
+        $reserved[$name] = true;
+
+        return $name;
+    }
+
+    /**
+     * Reserves the name prefix used for the extra segments of a very long
+     * string variable.
+     *
+     * Segments are physical variables of their own, so their generated names
+     * (prefix + segment number) have to be unique too. Prefer the first 5
+     * characters of the short name, which is what SPSS itself writes, and fall
+     * back to a generated prefix when any of those names is already taken.
+     *
+     * @param string $shortName
+     * @param int    $segmentCount
+     * @param array  $reserved names already taken, updated by this method
+     *
+     * @return string
+     */
+    private function generateSegmentNamePrefix($shortName, $segmentCount, array &$reserved)
+    {
+        $prefix  = mb_substr($shortName, 0, 5);
+        $counter = 0;
+
+        while (!$this->isSegmentNamePrefixFree($prefix, $segmentCount, $reserved)) {
+            $suffix = mb_strtoupper(base_convert($counter, 10, 36));
+            $prefix = mb_substr($shortName, 0, 5 - mb_strlen($suffix)) . $suffix;
+            $counter++;
+        }
+
+        for ($segment = 0; $segment < $segmentCount - 1; $segment++) {
+            $reserved[$prefix . $segment] = true;
+        }
+
+        return $prefix;
+    }
+
+    /**
+     * @param string $prefix
+     * @param int    $segmentCount
+     * @param array  $reserved
+     *
+     * @return bool
+     */
+    private function isSegmentNamePrefixFree($prefix, $segmentCount, array $reserved)
+    {
+        for ($segment = 0; $segment < $segmentCount - 1; $segment++) {
+            if (isset($reserved[$prefix . $segment])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
