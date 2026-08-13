@@ -74,6 +74,16 @@ class Variable extends Record
     public $name;
 
     /**
+     * Name prefix the extra segments of a very long string variable are named
+     * after. Assigned by the writer, which makes sure the resulting segment
+     * names do not collide with any other variable in the file.
+     * Defaults to the first 5 characters of the variable name.
+     *
+     * @var string|null
+     */
+    public $segmentNamePrefix;
+
+    /**
      * It has length label_len, rounded up to the nearest multiple of 32 bits.
      * The first label_len characters are the variable’s variable label.
      *
@@ -217,11 +227,10 @@ class Variable extends Record
      */
     public function getSegmentName($seg = 0)
     {
-        // TODO: refactory
-        $name = $this->name;
-        $name = mb_substr($name, 0, 5);
-        $name .= $seg;
+        $prefix = $this->segmentNamePrefix !== null
+            ? $this->segmentNamePrefix
+            : mb_substr($this->name, 0, 5);
 
-        return mb_strtoupper($name);
+        return mb_strtoupper($prefix . $seg);
     }
 }
